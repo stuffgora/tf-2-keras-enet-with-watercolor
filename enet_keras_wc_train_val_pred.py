@@ -165,7 +165,7 @@ def get_optimizer():
     #decay_steps = int(num_epochs_before_decay * num_steps_per_epoch) ~100*100
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate,
-        decay_steps=500, #10*2*(50*10),#    (steps_in_s*batch)
+        decay_steps=500, #10*2*(50*10),#    (steps_in_s*batch)cfg
         decay_rate=1e-1, #0.96,
         staircase=True)
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-8)

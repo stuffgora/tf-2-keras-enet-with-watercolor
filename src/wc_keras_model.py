@@ -11,11 +11,7 @@ import matplotlib.pyplot as plt
 import math as math
 import numpy as np
 
-from src.enetcfg import EnetCfg
-flags = EnetCfg()
-#flags.DEFINE_string('wc_activatin', None, "None - use no activation, <actv> - use <actv> in water collor midle layers, for example 'tanh/relu'" )
-flags.default_enet_cfg()
-cfg = flags.parse_args()
+
 
 
 
@@ -288,44 +284,49 @@ def decode_img(img,im_w=64,im_h=64):
   return  img
 
 if __name__ == '__main__':
-    
+    from enetcfg import EnetCfg
+    flags = EnetCfg()
+    #flags.DEFINE_string('wc_activatin', None, "None - use no activation, <actv> - use <actv> in water collor midle layers, for example 'tanh/relu'" )
+    flags.default_enet_cfg()
+    cfg = flags.parse_args(['--wc_lpl_mat','1'])          
     #with tf.device('/CPU:0'):
 
-        im_w = 64
-        im_h = 64
-        im_c = 3
-        pad = 4
-       
-        img_file = '../gray_square.png'
-        img = tf.io.read_file(img_file)
-        list_ds = tf.data.Dataset.list_files(img_file) #str(data_dir/'*/*')
-        for f in list_ds.take(1):
-            print(f.numpy())
+    im_w = 64
+    im_h = 64
+    im_c = 3
+    pad = 4
+   
+    img_file = '../gray_square.png'
+    img = tf.io.read_file(img_file)
+    list_ds = tf.data.Dataset.list_files(img_file) #str(data_dir/'*/*')
+    for f in list_ds.take(1):
+        print(f.numpy())
 
-        #my_img_rgb = tf.image.decode_image('gray_square.png', dtype=tf.float32)
-        my_img_rgb = decode_img(img)
-        my_show_image(my_img_rgb, "source img")
-        im1 = tf.image.resize_with_pad(my_img_rgb, im_h, im_w)
-        im1 = tf.reshape(im1,[1,im_h,im_w,im_c], name="input_reshaped")
-        show_tensor_img(im1[0],"Source image")
-        
-        model = get_wc_model( in_shape=[im_w,im_h,im_c], pad=pad, lpl_mat=cfg.wc_lpl_mat, activation=cfg.wc_activation  )
-        
-        res = model([im1,im1,im1])
-        res_rgb = layers.Dense(3, input_shape=(3,), use_bias=False, kernel_initializer=inv_opponent_init,dtype='float32')(res)
-        #res_rgb = tf.keras.activations.sigmoid(res_rgb)
-        #res_rgb = tf.keras.activations.tanh(res_rgb)
-        res_rgb = tf.keras.activations.relu(res_rgb)
+    #my_img_rgb = tf.image.decode_image('gray_square.png', dtype=tf.float32)
+    my_img_rgb = decode_img(img)
+    my_show_image(my_img_rgb, "source img")
+    im1 = tf.image.resize_with_pad(my_img_rgb, im_h, im_w)
+    im1 = tf.reshape(im1,[1,im_h,im_w,im_c], name="input_reshaped")
+    show_tensor_img(im1[0],"Source image")
     
-        res = tf.reshape(res,[res.shape[1],res.shape[2],im_c])
-        show_tensor_img(res,"result image")
-        
-        res_rgb = tf.reshape(res_rgb,[res_rgb.shape[1],res_rgb.shape[2],im_c])
-        show_tensor_img(res_rgb,"result RGB image")
-        
-        loss='categorical_crossentropy',
-        optimizer='adadelta'
-        model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy', 'mean_squared_error'])
+    model = get_wc_model( in_shape=[im_w,im_h,im_c], pad=pad, lpl_mat=cfg.wc_lpl_mat, activation=cfg.wc_activation  )
+    
+    res = model([im1,im1,im1])
+    res_rgb = layers.Dense(3, input_shape=(3,), use_bias=False, kernel_initializer=inv_opponent_init,dtype='float32')(res)
+    #res_rgb = tf.keras.activations.sigmoid(res_rgb)
+    #res_rgb = tf.keras.activations.tanh(res_rgb)
+    res_rgb = tf.keras.activations.relu(res_rgb)
 
-        
+    res = tf.reshape(res,[res.shape[1],res.shape[2],im_c])
+    show_tensor_img(res,"result image")
     
+    res_rgb = tf.reshape(res_rgb,[res_rgb.shape[1],res_rgb.shape[2],im_c])
+    show_tensor_img(res_rgb,"result RGB image")
+    
+    loss='categorical_crossentropy',
+    optimizer='adadelta'
+    model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy', 'mean_squared_error'])
+    
+    tf.keras.utils.plot_model(model, 'WC_MODEL_with_shape_info.png', show_shapes=True)
+    
+

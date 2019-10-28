@@ -47,8 +47,8 @@ class EnetCfg():
             self.parser.add_argument(f"--{var}", type=bool, default=value, help=desc)
         self.add_attr(var,value,desc)
     
-    def  parse_args(self):
-        r = self.parser.parse_args()
+    def  parse_args(self, args=[]):
+        r = self.parser.parse_args(args)
         #self.print_args()
         return r 
     
