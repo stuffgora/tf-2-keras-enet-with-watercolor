@@ -60,6 +60,7 @@ class EnetCfg():
         self.DEFINE_integer('batch_size', 10, 'The batch_size for Tes.')
         self.DEFINE_integer('val_batch_size', 25, 'The batch_size for Tes.')
         self.DEFINE_integer('concat_ds', 0, 'If > 0 concatinates val and train for training.')
+        self.DEFINE_integer('repeat_train_ds', None, 'If n > 0  repeat n time, if 0 repeat inf, if None do not repeat train datat set.')
 
         self.DEFINE_integer('steps', None, 'Number of batches in epoch')
         self.DEFINE_integer('epochs', 100, 'Number of epochs to proceed')

@@ -100,7 +100,7 @@ class WaitedCategoricalCrossentropy (tf.keras.losses.CategoricalCrossentropy):
 
 
 def get_class_normalization_dic(dataset=cfg.dataset_name):
-    cd_d = None     
+    cw_d = None     
     if dataset ==  'camvid': 
 #        class_weights = median_frequency_balancing()
 #        cw_d = {}        
@@ -108,10 +108,10 @@ def get_class_normalization_dic(dataset=cfg.dataset_name):
 #             cw_d[i] = c
         cw_d = {0: 0.0159531051456976, 1: 0.011580246710544183, 2: 0.22857586995014328, 3: 0.009042348126826805, 4: 0.05747495410789924, 5: 0.025342723815993118, 6: 0.16389458162792303, 7: 0.2807956777529651, 8: 0.0931421249518621186, 9: 0.9930486077110527676, 10: 0.85542331331773912, 11: 0.0001}
     if dataset ==  'coco': 
-        cw_d = {0: 0.0, 1: 0.05, 2: 0.1, 3: 0.05, 4: 0.05, 5: 0.1, 6: 0.3, 7: 0.1, 8: 0.1, 9: 0.6, 10: 0.05, 11: 0.05, 12: 0.2  }
+        #cw_d = {0: 0.0, 1: 0.05, 2: 0.1, 3: 0.05, 4: 0.05, 5: 0.1, 6: 0.3, 7: 0.1, 8: 0.1, 9: 0.6, 10: 0.05, 11: 0.05, 12: 0.2  }
         cw_d = {0: 0.0, 1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.0, 6: 1.0, 7: 1.0, 8: 1.0, 9: 1.0, 10: 1.0, 11: 1.0, 12: 1.0  }
         #cw_d = None
-    return cd_d
+    return cw_d
 
 
 def get_checkpoint_log_dir():
@@ -131,7 +131,9 @@ def model_preload(model):
     best_weights = os.path.join(checkpoint_dir, f'{cfg.model_name}_best.hdf5') 
     #best_weights = os.path.join(checkpoint_dir, f'enet_best.hdf5') #ckpt
     #best_weights = 'wc1_preloaded_coco.hdf5'
-    best_weights = 'evet_no_wc_preload_from_coco.hdf5'
+    #best_weights = 'evet_no_wc_preload_from_coco.hdf5'
+    #best_weights = '/home/ddd/Desktop/univer/project/py_ws/Enet/models/camvid/enet_wc_in_encoder_1/weights/enet_best.hdf5'
+    #best_weights = '/home/ddd/Desktop/univer/project/py_ws/Enet/models/camvid/enet_no_wc/weights/enet_best.hdf5'
     print(f'Tryigg to load model {best_weights}')
     if os.path.exists(best_weights):
         print(f'Loading model {best_weights}')
@@ -163,11 +165,12 @@ def get_optimizer():
     #decay_steps = int(num_epochs_before_decay * num_steps_per_epoch) ~100*100
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate,
-        decay_steps=10*2*(50*10),#    (steps_in_s*batch)
+        decay_steps=500, #10*2*(50*10),#    (steps_in_s*batch)
         decay_rate=1e-1, #0.96,
         staircase=True)
-    #optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-8)
-    optimizer='adadelta'
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-8)
+    #optimizer = tf.optimizers.Adadelta(learning_rate=5e-5, rho=1e-1, epsilon=1e-08)
+    #optimizer='adadelta'
     return optimizer
     
 
@@ -208,16 +211,34 @@ def get_train_val_data(dataset = cfg.dataset_name):
         train_ds = create_dataset(data_dir,im_w=dw,im_h=dh, num_classes=nc,reshape=None,class_w=class_weights)
         data_dir = "../dataset/val"
         val_ds = create_dataset(data_dir,im_w=dw,im_h=dh, num_classes=nc,reshape=None,class_w=class_weights) 
-    
-    if cfg.concat_ds > 0:
-        train_ds.concatenate(val_ds)
 
+    if cfg.concat_ds > 0:
+       train_ds = train_ds.concatenate(val_ds)
+
+    if cfg.repeat_train_ds is not None:
+        if cfg.repeat_train_ds == 0:
+            print("infinit train dataset !!!!!!!!!!!!!!!!!!!!!")
+            train_ds = train_ds.repeat()
+        else:
+           train_ds = train_ds.repeat(cfg.repeat_train_ds)
+        
     train_ds = prepare_for_training(train_ds, batch_size=cfg.batch_size, cache=None, shuffle_buffer_size=2)
-    print("infinit dataset !!!!!!!!!!!!!!!!!!!!!")
-    train_ds=train_ds.repeat()
     val_ds   = prepare_for_training(val_ds,   batch_size=cfg.val_batch_size, cache=None, shuffle_buffer_size=2)
     return train_ds, val_ds
 
+
+def get_test_data(dataset = cfg.dataset_name):
+    dw = cfg.image_width
+    dh = cfg.image_height
+    nc = cfg.num_classes #12 #get_classes_nmber()
+    if dataset ==  'coco':  
+        val_ds = create_coco_dataset(dataDir='../../../cocodataset', dataType='val2017', im_w=dw, im_h=dh)
+        test_ds = val_ds
+    elif dataset == 'camvid':
+        data_dir = "../dataset/test"                
+        test_ds = create_dataset(data_dir,im_w=dw,im_h=dh, num_classes=nc,reshape=None,data_transform=None)
+    test_ds = test_ds.batch(cfg.batch_size)
+    return test_ds
         
 def train( ):
     print(f'Preparing to train on {cfg.dataset_name} data...')
@@ -256,12 +277,26 @@ def evaluate():
     
     #-------- TODO get_dataset -------
     #test_ds = create_coco_test_set(im_w=cfg.image_width, im_h=cfg.image_height)
-    val_ds = create_coco_dataset(dataType='val2017', im_w=cfg.image_width, im_h=cfg.image_height) 
-    test_ds = val_ds
-    test_ds = model.batch(100)
+    #val_ds = create_coco_dataset(dataType='val2017', im_w=cfg.image_width, im_h=cfg.image_height) 
+    #test_ds = val_ds
+    #test_ds = model.batch(100)
+    test_ds = get_test_data()
     #--------------------------------
-    results = model.evaluate(test_ds, steps=100) 
-    print('\nTEST Evaluete:\ntest loss, test acc, test mse, test precision:', results)
+    results = model.evaluate(test_ds) #, steps=100) 
+    print('\nTEST Evaluete:\n [     Loss  ,      Accuracy, Mean Square Error, Precision:\n', results)
+    i = 0 
+    fid = 0       
+    for ims ,lbls in test_ds:
+        predictions = model.predict(ims)
+        for pred,lbl,img in zip(predictions,lbls,ims):
+            pred = np.argmax(pred,axis=-1)
+            lable = np.argmax(lbl,axis=-1)
+            f = calculate_fid(lable, pred)
+            if  np.all(np.isfinite(f)):
+                i+=1
+                fid += f 
+        if i > 100: break
+    print ("Mean FID :", fid/i)
     return model
 
 
@@ -289,9 +324,14 @@ def onehot_2_rgb(lbl):
 
 
 def visualize_prediction(pred,lbl,img):
-    pred  = onehot_2_rgb( tf.math.argmax(pred,axis=-1).numpy() )
-    lable = onehot_2_rgb( tf.math.argmax(lbl,axis=-1).numpy() )
-    lable = np.reshape(lable, [256,256,3])
+    pred = tf.math.argmax(pred,axis=-1).numpy()
+    lable = tf.math.argmax(lbl,axis=-1).numpy()
+    #lable = np.reshape(lable, [256,256,3])
+    fid = calculate_fid(lable, pred)
+    print('FID : %.3f' % fid)
+    pred  = onehot_2_rgb(pred  )
+    lable = onehot_2_rgb(lable )    
+    
     fig, ((ax1,ax2,ax3)) = plt.subplots(1,3)
     for ax in [ax1,ax2,ax3]: ax.axis('off')
     #plt.figure(figsize=(10,10))
@@ -300,19 +340,21 @@ def visualize_prediction(pred,lbl,img):
     ax3.imshow(img)
     plt.show()
     
-
+from src.utils import calculate_fid
 def predict():
     model = get_model()
     model, _ = model_preload(model)  
     #test_ds = create_coco_test_set(im_w=cfg.image_width, im_h=cfg.image_height)
     #val_ds = create_coco_dataset(dataType='val2017', im_w=cfg.image_width, im_h=cfg.image_height) 
-    _, val_ds = get_train_val_data()
-    test_ds = val_ds
+    #_, val_ds = get_train_val_data()
+    #test_ds = val_ds
+    test_ds = get_test_data()
     #test_ds = test_ds.batch(10)
     for ims ,lbls in test_ds.take(1):
         predictions = model.predict(ims)
         for pred,lbl,img in zip(predictions,lbls,ims):
             visualize_prediction(pred,lbl,img)
+    tf.keras.utils.plot_model(model, f'{cfg.model_name}_model_with_shape_info.png', show_shapes=True)
     return model
 
 
@@ -326,6 +368,8 @@ if __name__ == '__main__':
         trained_model = train()
     if cfg.predict_flow > 0:
         prediction_model = predict()
+    if cfg.eval_flow > 0:
+        eval_model = evaluate()
     
     if 0>0:
         cfg.image_width = 256

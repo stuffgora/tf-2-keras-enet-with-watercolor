@@ -186,8 +186,8 @@ class PoisonSolverLplMat(tf.keras.layers.Layer):
 
 def get_wc_model (in_shape, 
                   pad=3,
-                  alpha = 0.5,
-                  beta = 0.1,
+                  alpha = 0.6,
+                  beta = 0.3,
                   pyramid_depth = 3,
                   defusion_speed = 0.5,
                   reuse=None,
@@ -296,8 +296,9 @@ if __name__ == '__main__':
         im_c = 3
         pad = 4
        
-        img = tf.io.read_file('gray_square.png')
-        list_ds = tf.data.Dataset.list_files('gray_square.png') #str(data_dir/'*/*')
+        img_file = '../gray_square.png'
+        img = tf.io.read_file(img_file)
+        list_ds = tf.data.Dataset.list_files(img_file) #str(data_dir/'*/*')
         for f in list_ds.take(1):
             print(f.numpy())
 
@@ -308,7 +309,7 @@ if __name__ == '__main__':
         im1 = tf.reshape(im1,[1,im_h,im_w,im_c], name="input_reshaped")
         show_tensor_img(im1[0],"Source image")
         
-        model = get_wc_model( in_shape=[im_w,im_h,im_c], pad=pad, lpl_mat=cfg.wc_lpl_mat, activation=cfg.wc_activatin  )
+        model = get_wc_model( in_shape=[im_w,im_h,im_c], pad=pad, lpl_mat=cfg.wc_lpl_mat, activation=cfg.wc_activation  )
         
         res = model([im1,im1,im1])
         res_rgb = layers.Dense(3, input_shape=(3,), use_bias=False, kernel_initializer=inv_opponent_init,dtype='float32')(res)
