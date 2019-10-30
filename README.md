@@ -3,7 +3,7 @@
 This project demonstraits integration of the *human brain* “Watercolor Illusion” model to a deep NN (ENet).
 
 __Referances__ 
-
+		
 [Enet Paper](https://arxiv.org/pdf/1606.02147.pdf)
 
 [Watercolor Illusions Model Paper](https://www.frontiersin.org/articles/10.3389/fnins.2019.00225/full)
@@ -19,5 +19,9 @@ __Referances__
 [WC Model Graph](./WC_MODEL_with_shape_info.png)
 
 [TF 2.0 Enet Model](./src/enet_wc_keras_model.py)
+
+[Examples to run predictions on trained models](./cli_examples.py)
+
+[Temporary eperements notes doc](./enet_watercollor_experements_notes.odt)
 
 
