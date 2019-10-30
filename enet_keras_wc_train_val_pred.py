@@ -235,7 +235,7 @@ def get_test_data(dataset = cfg.dataset_name):
         val_ds = create_coco_dataset(dataDir='../../../cocodataset', dataType='val2017', im_w=dw, im_h=dh)
         test_ds = val_ds
     elif dataset == 'camvid':
-        data_dir = "../dataset/test"                
+        data_dir = f"{cfg.dataset_dir}/test"                
         test_ds = create_dataset(data_dir,im_w=dw,im_h=dh, num_classes=nc,reshape=None,data_transform=None)
     test_ds = test_ds.batch(cfg.batch_size)
     return test_ds
@@ -283,7 +283,7 @@ def evaluate():
     test_ds = get_test_data()
     #--------------------------------
     results = model.evaluate(test_ds) #, steps=100) 
-    print('\nTEST Evaluete:\n [     Loss  ,      Accuracy, Mean Square Error, Precision:\n', results)
+    print(f'\nTEST Evaluete of {cfg.model_name} model:\n [     Loss  ,      Accuracy, Mean Square Error, Precision:\n', results)
     i = 0 
     fid = 0       
     for ims ,lbls in test_ds:
