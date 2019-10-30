@@ -253,6 +253,11 @@ def transfer_weights(model, weights=None):
     return model
 
 
+def wc_zero_layer(inp):
+    _,w,h,c = inp.shape
+    wc_net = WcLayer(in_shape=[w,h,c])(inp)
+    return  Concatenate(axis=3)([inp, wc_net])
+
 
 def autoencoder_wc(nc, input_shape,
                 loss='categorical_crossentropy',
@@ -261,7 +266,10 @@ def autoencoder_wc(nc, input_shape,
                 wc_in_encoder=None,
                 wc_in_decoder=None):
     inp =  Input(shape=(input_shape[0], input_shape[1], 3))
-    enet = build_encoder(inp,wc=wc_in_encoder)
+    enet = inp
+    if wc_in_encoder == 0:
+        enet = wc_zero_layer(enet)
+    enet = build_encoder(enet, wc=wc_in_encoder)
     enet = build_decoder(enet, nc=nc, in_shape=input_shape,wc=wc_in_decoder)
     
     #enet = Reshape((data_shape, nc))(enet)
