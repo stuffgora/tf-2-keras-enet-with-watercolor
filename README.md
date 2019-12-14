@@ -22,6 +22,6 @@ __Referances__
 
 [Examples to run predictions on trained models](./cli_examples.py)
 
-[Temporary eperements notes doc](./enet_watercollor_experements_notes.odt)
+[Temporary experements notes doc](./enet_watercollor_experements_notes.odt)
 
 

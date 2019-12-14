@@ -221,13 +221,16 @@ def get_train_val_data(dataset = cfg.dataset_name):
             train_ds = train_ds.repeat()
         else:
            train_ds = train_ds.repeat(cfg.repeat_train_ds)
+           
+    if cfg.use_test_as_val_ds is not None:
+        val_ds = get_test_data(dataset = cfg.dataset_name, with_batch_size = False)
         
     train_ds = prepare_for_training(train_ds, batch_size=cfg.batch_size, cache=None, shuffle_buffer_size=2)
     val_ds   = prepare_for_training(val_ds,   batch_size=cfg.val_batch_size, cache=None, shuffle_buffer_size=2)
     return train_ds, val_ds
 
 
-def get_test_data(dataset = cfg.dataset_name):
+def get_test_data(dataset = cfg.dataset_name, with_batch_size = True):
     dw = cfg.image_width
     dh = cfg.image_height
     nc = cfg.num_classes #12 #get_classes_nmber()
@@ -237,7 +240,8 @@ def get_test_data(dataset = cfg.dataset_name):
     elif dataset == 'camvid':
         data_dir = f"{cfg.dataset_dir}/test"                
         test_ds = create_dataset(data_dir,im_w=dw,im_h=dh, num_classes=nc,reshape=None,data_transform=None)
-    test_ds = test_ds.batch(cfg.batch_size)
+    if with_batch_size :
+        test_ds = test_ds.batch(cfg.batch_size)
     return test_ds
         
 def train( ):

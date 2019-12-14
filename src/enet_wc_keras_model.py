@@ -7,7 +7,7 @@ Created on Thu Oct 10 20:56:35 2019
 import tensorflow as tf
 
 from tensorflow.keras.layers import Concatenate,Add
-from tensorflow.keras.layers import PReLU
+from tensorflow.keras.layers import PReLU, ReLU
 from tensorflow.keras.layers import ZeroPadding2D, Conv2DTranspose # Convolution2D, 
 from tensorflow.keras.layers import Permute, SpatialDropout2D
 from tensorflow.keras.layers import BatchNormalization
@@ -269,6 +269,8 @@ def autoencoder_wc(nc, input_shape,
     enet = inp
     if wc_in_encoder == 0:
         enet = wc_zero_layer(enet)
+        # added Relu
+        enet = ReLU()(enet) 
     enet = build_encoder(enet, wc=wc_in_encoder)
     enet = build_decoder(enet, nc=nc, in_shape=input_shape,wc=wc_in_decoder)
     
