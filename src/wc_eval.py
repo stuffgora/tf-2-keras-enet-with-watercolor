@@ -9,7 +9,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Input
 import matplotlib.pyplot as plt
 import numpy as np
-import tkinter
+#import tkinter
 
 from wc_keras_model import get_wc_model 
 from enetcfg import EnetCfg

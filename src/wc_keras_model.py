@@ -66,33 +66,45 @@ def gabor_even_init(shape, dtype=None,partition_info=None):
     return tf.convert_to_tensor ( kernel, dtype='float32')
 
 
-def wc_waits_layer(inputs, depth):
-    factor = 2**depth
-    shape = inputs.shape.as_list()
+
+  
+class WCWeights(tf.keras.layers.Layer):
+    def __init__(self ): 
+        super(WCWeights, self).__init__()
+        self.gabor_even = layers.Conv2D(3, (1,3), padding='same', activation='tanh',
+                                        kernel_initializer=gabor_even_init, name=f'gabor_even')
+            
+    def call(self, inputs, prmd_levels ):
+        return self.get_wc_waits(inputs, prmd_levels) 
     
-    prmd_l = layers.AvgPool2D(pool_size=factor)(inputs)
-    prmd_l = layers.Conv2D(3, (1,3), padding='same', activation='tanh',
-                  kernel_initializer=gabor_even_init)(prmd_l)
-    prmd_l = layers.UpSampling2D( size=factor, interpolation='nearest')(prmd_l)
-    if shape != prmd_l.shape.as_list() :
-        pad_h = shape[1] - prmd_l.shape.as_list()[1]
-        h_pad_h = int(pad_h/2)
-        pad_w = shape[2] - prmd_l.shape.as_list()[2]
-        h_pad_w = int(pad_w/2)
-        padding = ((h_pad_h, pad_h - h_pad_h) , (h_pad_w, pad_w - h_pad_w) )            
-        prmd_l = layers.ZeroPadding2D(padding = padding )(prmd_l)
-    prmd_l = tf.abs(prmd_l)
-    w = tf.abs(tf.stack([inputs,prmd_l], axis=4))
-    w = tf.reduce_max(w,axis=4)
-    return w
-
-
-def get_wc_waits(inputs, prmd_levels):
-    w = inputs
-    for idx in range(1,prmd_levels):
-        w = wc_waits_layer(w, idx)
-    return w
+    def wc_waits_layer(self, inputs, depth):
+        factor = 2**depth
+        shape = inputs.shape.as_list()
         
+        prmd_l = layers.AvgPool2D(pool_size=factor,name=f'pyramid_avg_pool_{depth}')(inputs)
+        prmd_l = self.gabor_even(prmd_l)
+#        prmd_l = layers.Conv2D(3, (1,3), padding='same', activation='tanh',
+#                      kernel_initializer=gabor_even_init, name=f'prmd_w_even_gabor_{depth}')(prmd_l)
+        prmd_l = layers.UpSampling2D( size=factor, interpolation='nearest',name=f'prmd_upsampl_{depth}')(prmd_l)
+        if shape != prmd_l.shape.as_list() :
+            pad_h = shape[1] - prmd_l.shape.as_list()[1]
+            h_pad_h = int(pad_h/2)
+            pad_w = shape[2] - prmd_l.shape.as_list()[2]
+            h_pad_w = int(pad_w/2)
+            padding = ((h_pad_h, pad_h - h_pad_h) , (h_pad_w, pad_w - h_pad_w) )            
+            prmd_l = layers.ZeroPadding2D(padding = padding , name=f'prmd_zeropadd_{depth}')(prmd_l)
+        prmd_l = tf.abs(prmd_l)
+        w = tf.abs(tf.stack([inputs,prmd_l], axis=4))
+        w = tf.reduce_max(w,axis=4)
+        return w
+
+    def get_wc_waits(self, inputs, prmd_levels):
+        w = inputs
+        for idx in range(1,prmd_levels):
+            w = self.wc_waits_layer(w, idx)
+        return w
+      
+
         
 def dct2(x):  
     ry = tf.signal.dct(x,type=1)
@@ -142,6 +154,7 @@ class PoisonSolver3D(tf.keras.layers.Layer):
     def __init__(self,in_shape, h=0.7): # **kwargs):
         #kwargs['autocast']=False
         super(PoisonSolver3D, self).__init__() #**kwargs)
+        #self.h = tf.Variable(h,name='defusion_speed', trainable=True)
         _,w,h,c = in_shape
         self.lamda_mat = tf.constant(get_lam_mat(w,h))
         
@@ -175,17 +188,27 @@ class PoisonSolverLplMat(tf.keras.layers.Layer):
         r = tf.matmul(self.inv_lpl_mat, r)
         return  tf.reshape(r, x.shape)
         
-        
     def call(self, inp):
         return tf.map_fn(self.laplace_inv,inp)
 
 
+class ApplyWeights(tf.keras.layers.Layer):
+    def __init__(self,alpha=0.6, beta =0.3 ): 
+        super(ApplyWeights, self).__init__()
+        self.alpha = tf.Variable(alpha,name='alpha', trainable=True)
+        self.beta = tf.Variable(beta, name='beta', trainable=True)
+    
+    def call(self, im_d, w ):
+        im_d_w = tf.math.multiply(im_d,w)
+        return  self.alpha*im_d + self.beta*im_d_w    
+  
+          
 def get_wc_model (in_shape, 
                   pad=3,
                   alpha = 0.6,
                   beta = 0.3,
                   pyramid_depth = 3,
-                  defusion_speed = 0.5,
+                  defusion_speed = 1.1,
                   reuse=None,
                   is_training=True,
                   scope='wc_model',
@@ -202,41 +225,60 @@ def get_wc_model (in_shape,
 #        inputs =  layers.Input(shape=in_shape)
     inputs =  layers.Input(shape=in_shape)
     #with tf.variable_scope(scope, reuse=reuse):
-    alpha = tf.Variable(alpha)
-    beta  = tf.Variable(beta)
+    #alpha = tf.Variable(alpha,name='alpha')
+    #beta  = tf.Variable(beta, name='beta')
 
     #in_opponent = layers.Dense(3, input_shape=(3,), use_bias=False, activation='tanh',
     in_opponent = layers.Dense(3,  use_bias=False, activation=activation,
-                     kernel_initializer=opponent_init, dtype='float32') (inputs)
+                     kernel_initializer=opponent_init, dtype='float32', name="to_opponent") (inputs)
     #show_tensor_img(in_opponent[0],"opponent")
 
     f = layers.ZeroPadding2D(padding = pad )(in_opponent)
-    im_dx = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-                          kernel_initializer=gabor_odd_init,dtype='float32')(f)
-    im_dy = tf.transpose(f,[0,2,1,3])
-    #Permute((2, 1), input_shape=(10, 64))
-    im_dy = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-                          kernel_initializer=gabor_odd_init)(im_dy)
     
-    wx = get_wc_waits(in_opponent, pyramid_depth)
-    wy = get_wc_waits(tf.transpose(in_opponent, [0,2,1,3]), pyramid_depth )
+    gabor_odd = layers.Conv2D(3,(1,2), padding='same', activation=activation,
+                          kernel_initializer=gabor_odd_init,dtype='float32', name='gabor_odd')
+    im_dx = gabor_odd(f)
+    im_dy = tf.transpose(f,[0,2,1,3])
+    im_dy = gabor_odd(im_dy)
+    
+    #im_dx = layers.Conv2D(3,(1,2), padding='same', activation=activation,
+    #                      kernel_initializer=gabor_odd_init,dtype='float32', name='im_dx')(f)
+    
+    #Permute((2, 1), input_shape=(10, 64))
+    #im_dy = layers.Conv2D(3,(1,2), padding='same', activation=activation,
+    #                      kernel_initializer=gabor_odd_init, name='im_dy')(im_dy)
+    wc_weights = WCWeights()
+    
+    wx = wc_weights(in_opponent, pyramid_depth)
+    wy = wc_weights(tf.transpose(in_opponent, [0,2,1,3]), pyramid_depth )
     wx = layers.ZeroPadding2D(padding = pad )(wx)
     wy = layers.ZeroPadding2D(padding = pad )(wy)
     #show_tensor_img(wx[0],"wx")
     #show_tensor_img(wy[0],"wy")
-    im_dx_w = tf.math.multiply(im_dx,wx)
-    im_dy_w = tf.math.multiply(im_dy,wy)
-                               
-    trig_xx = alpha*im_dx + beta*im_dx_w
-    trig_yy = alpha*im_dy + beta*im_dy_w
     
-    trig_xx = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-                          kernel_initializer=gabor_odd_init,dtype='float32')(trig_xx)                          
-    trig_yy = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-                          kernel_initializer=gabor_odd_init,dtype='float32')(trig_yy)
+    
+    
+    apply_weights = ApplyWeights(alpha=alpha, beta=beta)
+    trig_xx = apply_weights(im_dx, wx)
+    trig_yy = apply_weights(im_dy, wy)
+    
+#    im_dx_w = tf.math.multiply(im_dx,wx)
+#    im_dy_w = tf.math.multiply(im_dy,wy)
+    
+#    trig_xx = layers.add([tf.math.multiply(alpha,im_dx) , tf.math.multiply( im_dx_w, beta)])
+#    trig_yy = layers.add([tf.math.multiply(alpha,im_dy) , tf.math.multiply( im_dy_w, beta)])
+    #trig_yy = alpha*im_dy + beta*im_dy_w
+    
+    
+    trig_xx = gabor_odd(trig_xx)
+    trig_yy = gabor_odd(trig_yy)
+#    trig_xx = layers.Conv2D(3,(1,2), padding='same', activation=activation,
+#                          kernel_initializer=gabor_odd_init,dtype='float32', name='trig_xx')(trig_xx)                          
+#    trig_yy = layers.Conv2D(3,(1,2), padding='same', activation=activation,
+#                          kernel_initializer=gabor_odd_init,dtype='float32', name='trig_yy')(trig_yy)
     
     trig_yy = tf.transpose(trig_yy,[0,2,1,3])       
-    div_trig = trig_xx + trig_yy
+    div_trig = layers.add([trig_xx , trig_yy])
     #show_tensor_img(div_trig[0],"div_trig")
     
     #lam_mat = get_lam_mat( m + 2*pad, n + 2*pad , h=defusion_speed)
@@ -256,7 +298,7 @@ def get_wc_model (in_shape,
     #show_tensor_img(res[0],"result img")
     res= layers.Cropping2D(cropping=pad)(res)
     
-    model = tf.keras.Model(inputs=inputs, outputs=res)
+    model = tf.keras.Model(inputs=inputs, outputs=res, name='WC_model')
     return model
     
 def show_tensor_img(tf_img, title = 'no title'):
@@ -288,11 +330,13 @@ if __name__ == '__main__':
     flags = EnetCfg()
     #flags.DEFINE_string('wc_activatin', None, "None - use no activation, <actv> - use <actv> in water collor midle layers, for example 'tanh/relu'" )
     flags.default_enet_cfg()
-    cfg = flags.parse_args(['--wc_lpl_mat','1'])          
+    cfg = flags.parse_args() 
+    #cfg = flags.parse_args(['--wc_lpl_mat','1'])          
+         
     #with tf.device('/CPU:0'):
 
-    im_w = 64
-    im_h = 64
+    im_w = 256 #64
+    im_h =256 #64
     im_c = 3
     pad = 4
    
@@ -315,13 +359,15 @@ if __name__ == '__main__':
     res_rgb = layers.Dense(3, input_shape=(3,), use_bias=False, kernel_initializer=inv_opponent_init,dtype='float32')(res)
     #res_rgb = tf.keras.activations.sigmoid(res_rgb)
     #res_rgb = tf.keras.activations.tanh(res_rgb)
-    res_rgb = tf.keras.activations.relu(res_rgb)
+    # -> res_rgb = tf.keras.activations.relu(res_rgb)
 
     res = tf.reshape(res,[res.shape[1],res.shape[2],im_c])
     show_tensor_img(res,"result image")
+    show_tensor_img(res[:,:,0],"result image")
     
     res_rgb = tf.reshape(res_rgb,[res_rgb.shape[1],res_rgb.shape[2],im_c])
     show_tensor_img(res_rgb,"result RGB image")
+    my_show_image(my_img_rgb, "source img")
     
     loss='categorical_crossentropy',
     optimizer='adadelta'
@@ -329,4 +375,7 @@ if __name__ == '__main__':
     
     tf.keras.utils.plot_model(model, 'WC_MODEL_with_shape_info.png', show_shapes=True)
     
+    print(model.summary())
+    for v in model.variables:
+        print(v.name, v.numpy())
 
