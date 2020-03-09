@@ -6,7 +6,7 @@ Created on Wed Dec 11 00:24:54 2019
 """
 
 import tensorflow as tf
-from tensorflow.keras.layers import Input
+from tensorflow.keras.layers import Input, ReLU
 import matplotlib.pyplot as plt
 import numpy as np
 #import tkinter
@@ -47,8 +47,9 @@ if __name__ == '__main__':
     im_w = cfg.image_width
     im_c = 3
     
-    img_file = '../gray_square.png'
-    img_file = '../dataset/test/Seq05VD_f04770.png'
+    #img_file = '../gray_square.png'
+    img_file = '../hard_stars.png'
+    #img_file = '../dataset/test/Seq05VD_f04770.png'
     img = tf.io.read_file(img_file)
     
     my_img_rgb = decode_img(img, im_h, im_w)
@@ -62,6 +63,8 @@ if __name__ == '__main__':
     inp =  Input(shape=(input_shape[0], input_shape[1], 3))
     model = inp
     model = wc_zero_layer(model)
+    #model = ReLU()(model)
+    #model = tf.keras.activations.tanh(model)
     model = tf.keras.Model(inputs=inp, outputs=model)
     
     
@@ -72,10 +75,12 @@ if __name__ == '__main__':
     #res = tf.reshape(res,[res.shape[1],res.shape[2],3])
     #show_tensor_img(res,"result image")
     my_show_image(res,"result image")
-    my_show_image(res[:,:,0],"result image[0]")
+    
     
     norm_res = res
     for i in range(3):
+        my_show_image(res[:,:,i],f"WC result image[{i}]")
+        plt.colorbar()
         tmp = res[:,:,i]
         tmp -= np.min(tmp)
         tmp = tmp/np.max(tmp)
@@ -94,9 +99,17 @@ if __name__ == '__main__':
         cfg.wc_in_decoder = None
         # first 7 layers : inp -> conv2d->maxpull->concat->[0:3] init -> conv2d->norm->prelu 
         enet_model = get_model(cfg)
+        # tf.keras.utils.plot_model(enet_model, f'curr_model.png', show_shapes=True)
+        
         #best_weights = 'models/coco/enet_no_wc_256x256/weights/enet_no_wc_256x256_best.hdf5'
-        best_weights = '../models/camvid/enet_wc_before_encoder_256x256/weights/enet_wc_before_encoder_256x256_best.hdf5'
+        #best_weights = '../models/camvid/enet_wc_before_encoder_256x256/weights/enet_wc_before_encoder_256x256_best.hdf5'
+        #best_weights = '../models/camvid/enet_wc_reduced_before_encoder_256x256_test_as_val_relu/weights/enet_wc_reduced_before_encoder_256x256_test_as_val_relu_best.hdf5'
+        #best_weights = '../models/camvid/enet_wc_reduced_before_encoder_256x256_test_as_val_tanh/weights/enet_wc_reduced_before_encoder_256x256_test_as_val_tanh_best.hdf5'
+        #best_weights = '../models/camvid/enet_wc_reduced_before_encoder_256x256_relu/weights/enet_wc_reduced_before_encoder_256x256_relu_best.hdf5'
+        best_weights = '../models/camvid/enet_wc_reduced_before_encoder_256x256_no_relu/weights/enet_wc_reduced_before_encoder_256x256_no_relu_best.hdf5'
+        
         enet_model.load_weights(best_weights)
+        
         print(enet_model.layers[2].get_weights())
         for idx in range(2):
             model.layers[idx].set_weights(enet_model.layers[idx].get_weights())
@@ -104,7 +117,21 @@ if __name__ == '__main__':
         res = model.predict(im1)
         res = res[0,:,:,3:]
         my_show_image(res,"result image preloaded")
-        my_show_image(res[:,:,0],"result image preloaded[0]")
+        
+        norm_res = res
+        for i in range(3):
+            my_show_image(res[:,:,i],f"result image  preloaded[{i}]")
+            plt.colorbar()
+            tmp = res[:,:,i]
+            tmp -= np.min(tmp)
+            tmp = tmp/np.max(tmp)
+            norm_res[:,:,i] = tmp 
+        my_show_image(rgb_norm_res,"norm predicted result image")
+        
+        print(model.summary())
+        for v in model.variables:
+            print(v.name, v.numpy())
+
         
 #        cfg.wc_in_encoder = 1
 #        wc_model = get_model()

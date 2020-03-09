@@ -34,6 +34,12 @@ def get_oponent_filter() :
     a = 0.2989
     b = 0.5780
     c = 0.1140
+    
+#    d = 1/math.sqrt(3.0)
+#    a = d
+#    b = d
+#    c = d
+    
     flt = [[1/s2, -1/s2,  0   ],
            [1/s6,  1/s6, -2/s6],
            [  a ,    b ,  c   ]
@@ -47,7 +53,7 @@ def opponent_init(shape, dtype='float32', partition_info=None):
 
 def inv_opponent_init(shape, dtype=None,partition_info=None):
     kernel = np.linalg.inv(get_oponent_filter())
-    return tf.convert_to_tensor ( kernel , dtype =tf.float32, name ='oponent_kerenl' )
+    return tf.convert_to_tensor ( kernel , dtype =tf.float32, name ='inv_oponent_kerenl' )
 
 
 def gabor_odd_init(shape, dtype=None,partition_info=None):
@@ -94,19 +100,50 @@ class WCWeights(tf.keras.layers.Layer):
             padding = ((h_pad_h, pad_h - h_pad_h) , (h_pad_w, pad_w - h_pad_w) )            
             prmd_l = layers.ZeroPadding2D(padding = padding , name=f'prmd_zeropadd_{depth}')(prmd_l)
         prmd_l = tf.abs(prmd_l)
-        w = tf.abs(tf.stack([inputs,prmd_l], axis=4))
-        w = tf.reduce_max(w,axis=4)
+        w = tf.stack([inputs,prmd_l], axis=4)
+        #w = tf.abs(tf.stack([inputs,prmd_l], axis=4))
+        #w = tf.reduce_max(w,axis=4)
+        w = tf.math.reduce_sum(w,axis=(4))
+        #w = tf.abs(w)
+        
         return w
 
     def get_wc_waits(self, inputs, prmd_levels):
         w = inputs
         for idx in range(1,prmd_levels):
             w = self.wc_waits_layer(w, idx)
+        w = tf.math.reduce_sum(w,axis=(3))
+        w = tf.stack([w,w,w],axis=3)
+        w = tf.abs(w)
         return w
       
 
-        
+def dst(x,axis=-1):
+    """Discrete Sine Transform (DST-I)
+
+    Implemented using 2(N+1)-point FFT
+    xsym = r_[0,x,0,-x[::-1]]
+    DST = (-imag(fft(xsym))/2)[1:(N+1)]
+
+    adjusted to work over an arbitrary axis for entire n-dim array
+    """
+    m,n = x.shape
+    pad = np.zeros((m,1))
+    pad = tf.convert_to_tensor(pad, dtype=tf.float32)
+    xsym = tf.concat([pad,x,pad,tf.reverse(-x,[1])], axis=1)
+    xsym = tf.complex(xsym, np.zeros(xsym.shape,dtype='float32'))
+    DST = tf.signal.fft(xsym)
+    return (-tf.math.imag(DST)/2)[:, 1:n+1]
+    
+
+#def dct2(x):  
+#    return dst2(x)  
+
 def dct2(x):  
+    r = dst( tf.transpose(x))
+    return dst( tf.transpose(r))
+
+def dct2_orgn(x):  
     ry = tf.signal.dct(x,type=1)
     r = tf.signal.dct( tf.transpose(ry), type=1)
     return tf.transpose(r) 
@@ -137,7 +174,8 @@ def fft_poisson_2d(f, lam_mat ):
     f_bar = f_bar * normlz  #Normalize
     u_bar = layers.Multiply()([f_bar,lam_mat])
     u = dct2(u_bar)                #sine transform back
-    normlz = 2.0/((n-1.0)*(m-1.0))
+    #normlz = 2.0/((n-1.0)*(m-1.0))
+    normlz = 2.0**2/((n+1.0)*(m+1.0))
     u = u * normlz         #normalize 
     return u
 
@@ -205,30 +243,20 @@ class ApplyWeights(tf.keras.layers.Layer):
           
 def get_wc_model (in_shape, 
                   pad=3,
-                  alpha = 0.6,
-                  beta = 0.3,
+                  alpha = 0.8,
+                  beta = 0.4,
                   pyramid_depth = 3,
-                  defusion_speed = 1.1,
+                  defusion_speed = 0.6,
                   reuse=None,
                   is_training=True,
                   scope='wc_model',
                   lpl_mat = None,
                   activation ='tanh',
+                  trainable=True,
                   ):
-#    if lam_mat is None:
-#        #_,m,n,c = inputs.shape #
-#        m,n,c = in_shape
-#        tf_get_lam_mat = tf.function(get_lam_mat)
-#        lam_mat = tf_get_lam_mat( m + 2*pad, n + 2*pad , h=defusion_speed)
-#    
-#    if inputs is None:
-#        inputs =  layers.Input(shape=in_shape)
-    inputs =  layers.Input(shape=in_shape)
-    #with tf.variable_scope(scope, reuse=reuse):
-    #alpha = tf.Variable(alpha,name='alpha')
-    #beta  = tf.Variable(beta, name='beta')
 
-    #in_opponent = layers.Dense(3, input_shape=(3,), use_bias=False, activation='tanh',
+    inputs =  layers.Input(shape=in_shape)
+  
     in_opponent = layers.Dense(3,  use_bias=False, activation=activation,
                      kernel_initializer=opponent_init, dtype='float32', name="to_opponent") (inputs)
     #show_tensor_img(in_opponent[0],"opponent")
@@ -236,85 +264,59 @@ def get_wc_model (in_shape,
     f = layers.ZeroPadding2D(padding = pad )(in_opponent)
     
     gabor_odd = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-                          kernel_initializer=gabor_odd_init,dtype='float32', name='gabor_odd')
+                          kernel_initializer=gabor_odd_init, dtype='float32', name='gabor_odd')
     im_dx = gabor_odd(f)
-    im_dy = tf.transpose(f,[0,2,1,3])
-    im_dy = gabor_odd(im_dy)
+    f_t = tf.transpose(f, [0,2,1,3])
+    im_dy = gabor_odd(f_t)
     
-    #im_dx = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-    #                      kernel_initializer=gabor_odd_init,dtype='float32', name='im_dx')(f)
-    
-    #Permute((2, 1), input_shape=(10, 64))
-    #im_dy = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-    #                      kernel_initializer=gabor_odd_init, name='im_dy')(im_dy)
     wc_weights = WCWeights()
     
-    wx = wc_weights(in_opponent, pyramid_depth)
-    wy = wc_weights(tf.transpose(in_opponent, [0,2,1,3]), pyramid_depth )
-    wx = layers.ZeroPadding2D(padding = pad )(wx)
-    wy = layers.ZeroPadding2D(padding = pad )(wy)
+    #ww = layers.ZeroPadding2D(padding = pad )(in_opponent)
+    
+    #wy = wc_weights(tf.transpose(ww, [0,2,1,3]), pyramid_depth )
+    wx = wc_weights(f,   pyramid_depth )
+    wy = wc_weights(f_t, pyramid_depth )
+#    wx = layers.ZeroPadding2D(padding = pad )(wx)
+#    wy = layers.ZeroPadding2D(padding = pad )(wy)
     #show_tensor_img(wx[0],"wx")
-    #show_tensor_img(wy[0],"wy")
-    
-    
+    #show_tensor_img(wy[0],"wy")   
     
     apply_weights = ApplyWeights(alpha=alpha, beta=beta)
     trig_xx = apply_weights(im_dx, wx)
     trig_yy = apply_weights(im_dy, wy)
-    
-#    im_dx_w = tf.math.multiply(im_dx,wx)
-#    im_dy_w = tf.math.multiply(im_dy,wy)
-    
-#    trig_xx = layers.add([tf.math.multiply(alpha,im_dx) , tf.math.multiply( im_dx_w, beta)])
-#    trig_yy = layers.add([tf.math.multiply(alpha,im_dy) , tf.math.multiply( im_dy_w, beta)])
-    #trig_yy = alpha*im_dy + beta*im_dy_w
-    
-    
+        
     trig_xx = gabor_odd(trig_xx)
     trig_yy = gabor_odd(trig_yy)
-#    trig_xx = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-#                          kernel_initializer=gabor_odd_init,dtype='float32', name='trig_xx')(trig_xx)                          
-#    trig_yy = layers.Conv2D(3,(1,2), padding='same', activation=activation,
-#                          kernel_initializer=gabor_odd_init,dtype='float32', name='trig_yy')(trig_yy)
     
     trig_yy = tf.transpose(trig_yy,[0,2,1,3])       
     div_trig = layers.add([trig_xx , trig_yy])
     #show_tensor_img(div_trig[0],"div_trig")
     
-    #lam_mat = get_lam_mat( m + 2*pad, n + 2*pad , h=defusion_speed)
-    #fixed_poisson = tf.function(lambda x : poisson_3d(x, lam_mat) )
-    #res = tf.map_fn(fixed_poisson,div_trig)
-    #res = div_trig
-    #TODO fix
-    #res = dct_try(div_trig)
     if lpl_mat is None:
-        res=PoisonSolver3D(in_shape=div_trig.shape,h=defusion_speed)(div_trig)
+        res=PoisonSolver3D(in_shape=div_trig.shape, h=defusion_speed)(div_trig)
     else:
-        res = PoisonSolverLplMat(in_shape=div_trig.shape,d=1)(div_trig)
-    #res = layers.Lambda(dct_try)(div_trig)
-    #res = layers.Conv2D(8,(2,2), padding='same', activation='tanh',)(div_trig)
-    #res = layers.Conv2D(3,(2,2), padding='same', activation='tanh',)(res)
-    #res = layers.Conv2D(3,(2,2), padding='same', activation='tanh',)(res)
+        res = PoisonSolverLplMat(in_shape=div_trig.shape, d=defusion_speed)(div_trig)
     #show_tensor_img(res[0],"result img")
     res= layers.Cropping2D(cropping=pad)(res)
     
     model = tf.keras.Model(inputs=inputs, outputs=res, name='WC_model')
+    
+    if trainable == False:
+        for layer in model.layers:
+            layer.trainable=False
     return model
+
     
 def show_tensor_img(tf_img, title = 'no title'):
-    #init_op = tf.initialize_all_variables()
-    #with tf.Session() as sess:
-        #sess.run(init_op)
-        #im = sess.run(tf_img)
     my_show_image(tf_img,title)
 
 
-def my_show_image(img,title):
-    
+def my_show_image(img,title):  
     plt.figure(figsize=(10,10))
     plt.imshow(img)
     plt.title(title)
     plt.show()
+
 
 def decode_img(img,im_w=64,im_h=64):
   # convert the compressed string to a 3D uint8 tensor
@@ -322,8 +324,10 @@ def decode_img(img,im_w=64,im_h=64):
   # Use `convert_image_dtype` to convert to floats in the [0,1] range.
   img = tf.image.convert_image_dtype(img, tf.float32)
   # resize the image to the desired size.
-  img = tf.image.resize(img, [im_w, im_w])
+  #img = tf.image.resize(img, [im_w, im_w])
+  img = tf.image.resize_with_pad(img, im_h, im_w)
   return  img
+
 
 if __name__ == '__main__':
     from enetcfg import EnetCfg
@@ -336,46 +340,61 @@ if __name__ == '__main__':
     #with tf.device('/CPU:0'):
 
     im_w = 256 #64
-    im_h =256 #64
+    im_h = 256 #64
+    #im_w = 128
+    #im_h = 128
     im_c = 3
-    pad = 4
+    pad = 8
    
     img_file = '../gray_square.png'
+    img_file = '../stars_clean.png'
+    #img_file = '../wc_ddrm.png'
     img = tf.io.read_file(img_file)
-    list_ds = tf.data.Dataset.list_files(img_file) #str(data_dir/'*/*')
-    for f in list_ds.take(1):
-        print(f.numpy())
+    #list_ds = tf.data.Dataset.list_files(img_file) #str(data_dir/'*/*')
+    #for f in list_ds.take(1):
+    #    print(f.numpy())
 
     #my_img_rgb = tf.image.decode_image('gray_square.png', dtype=tf.float32)
-    my_img_rgb = decode_img(img)
+    my_img_rgb = decode_img(img, im_w,im_h)
     my_show_image(my_img_rgb, "source img")
-    im1 = tf.image.resize_with_pad(my_img_rgb, im_h, im_w)
-    im1 = tf.reshape(im1,[1,im_h,im_w,im_c], name="input_reshaped")
-    show_tensor_img(im1[0],"Source image")
+    #im1 = tf.image.resize_with_pad(my_img_rgb, im_h, im_w)
+    im1 = tf.reshape(my_img_rgb,[1,im_h,im_w,im_c], name="input_reshaped")
+    show_tensor_img(im1[0],"Source image tensot[0]")
     
-    model = get_wc_model( in_shape=[im_w,im_h,im_c], pad=pad, lpl_mat=cfg.wc_lpl_mat, activation=cfg.wc_activation  )
+    #cfg.wc_lpl_mat = 1
+    #cfg.wc_activation  = None
     
-    res = model([im1,im1,im1])
-    res_rgb = layers.Dense(3, input_shape=(3,), use_bias=False, kernel_initializer=inv_opponent_init,dtype='float32')(res)
+    k = 1.0
+    alpha = 0.9 * k
+    beta  = 0.2  * k
+    pyramid_depth = 4
+    defusion_speed = 1.0
+    model = get_wc_model( in_shape=[im_w,im_h,im_c], pad=pad,alpha=alpha, beta=beta, pyramid_depth=pyramid_depth, 
+                         defusion_speed=defusion_speed, lpl_mat=cfg.wc_lpl_mat, activation=cfg.wc_activation  )
+    
+    res = model([im1,im1])
+    res_rgb = layers.Dense(3, input_shape=(3,), use_bias=False, kernel_initializer=inv_opponent_init, dtype='float32')(res)
     #res_rgb = tf.keras.activations.sigmoid(res_rgb)
     #res_rgb = tf.keras.activations.tanh(res_rgb)
-    # -> res_rgb = tf.keras.activations.relu(res_rgb)
+    #res_rgb = tf.keras.activations.relu(res_rgb)
 
     res = tf.reshape(res,[res.shape[1],res.shape[2],im_c])
     show_tensor_img(res,"result image")
-    show_tensor_img(res[:,:,0],"result image")
+    show_tensor_img(res[:,:,0],"result image 0")
+    show_tensor_img(res[:,:,1],"result image 1")
+    show_tensor_img(res[:,:,2],"result image 2")
     
     res_rgb = tf.reshape(res_rgb,[res_rgb.shape[1],res_rgb.shape[2],im_c])
     show_tensor_img(res_rgb,"result RGB image")
     my_show_image(my_img_rgb, "source img")
     
-    loss='categorical_crossentropy',
-    optimizer='adadelta'
-    model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy', 'mean_squared_error'])
-    
-    tf.keras.utils.plot_model(model, 'WC_MODEL_with_shape_info.png', show_shapes=True)
-    
-    print(model.summary())
-    for v in model.variables:
-        print(v.name, v.numpy())
+#    loss='categorical_crossentropy',
+#    optimizer='adadelta'
+#    model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy', 'mean_squared_error'])
+#    
+#    tf.keras.utils.plot_model(model, 'WC_MODEL_with_shape_info.png', show_shapes=True)
+#    
+#    print(model.summary())
+#    for v in model.variables:
+#        print(v.name, v.numpy())
 

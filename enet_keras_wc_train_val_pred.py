@@ -180,7 +180,7 @@ def get_loss():
     return loss
 
 
-def get_model():
+def get_model(cfg=cfg):
     dw = cfg.image_width
     dh = cfg.image_height
     

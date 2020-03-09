@@ -270,7 +270,8 @@ def autoencoder_wc(nc, input_shape,
     if wc_in_encoder == 0:
         enet = wc_zero_layer(enet)
         # added Relu
-        enet = ReLU()(enet) 
+        enet = ReLU()(enet)
+        #enet = tf.keras.activations.tanh(enet)
     enet = build_encoder(enet, wc=wc_in_encoder)
     enet = build_decoder(enet, nc=nc, in_shape=input_shape,wc=wc_in_decoder)
     
@@ -287,7 +288,7 @@ def autoencoder_wc(nc, input_shape,
 
 if __name__ == '__main__':
     with tf.device('/CPU:0'):
-        autoencoder_wc, name = autoencoder_wc(nc=2, input_shape=(512, 512))
+        autoencoder_wc, name = autoencoder_wc(nc=12, input_shape=(256, 256),wc_in_encoder=3)
         tf.keras.utils.plot_model(autoencoder_wc, 'enet_wc_net.png', show_shapes=True)
     print("Done!")
     
