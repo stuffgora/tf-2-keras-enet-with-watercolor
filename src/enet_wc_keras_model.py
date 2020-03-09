@@ -87,7 +87,7 @@ def initial_block(inp, nb_filter=13, nb_row=3, nb_col=3, conv_stride=(2, 2), wc=
     conv = Convolution2D(nb_filter, [nb_row, nb_col], padding='same', strides=conv_stride)(inp)
     max_pool = MaxPooling2D()(inp)
     
-    #---- WC 2 added ----------
+    #---- WCsrc/enet_wc_keras_model.py 2 added ----------
     if wc == 2 : # 3 maxpull channels with wc
         wc_net = max_pool
         _,w,h,c = wc_net.shape
@@ -118,7 +118,7 @@ def initial_block(inp, nb_filter=13, nb_row=3, nb_col=3, conv_stride=(2, 2), wc=
 def bottleneck(inp, output, internal_scale=4, use_relu=True, asymmetric=0, dilated=0, downsample=False, dropout_rate=0.1):
     # main branch
     internal = int(output / internal_scale)
-    encoder = inp
+    encoder src/enet_wc_keras_model.py= inp
 
     ## 1x1
     input_stride = 2 if downsample else 1  # the first 1x1 projection is replaced with a 2x2 convolution when downsampling
