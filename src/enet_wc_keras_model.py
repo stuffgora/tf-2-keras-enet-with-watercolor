@@ -270,7 +270,11 @@ def autoencoder_wc(nc, input_shape,
     if wc_in_encoder == 0:
         enet = wc_zero_layer(enet)
         # added Relu
-        enet = ReLU()(enet) 
+        #enet = ReLU()(enet)
+        #enet = tf.keras.activations.sigmoid(enet)
+        #enet = tf.keras.activations.tanh(enet)
+        #enet = tf.keras.activations.relu(enet)
+
     enet = build_encoder(enet, wc=wc_in_encoder)
     enet = build_decoder(enet, nc=nc, in_shape=input_shape,wc=wc_in_decoder)
     
