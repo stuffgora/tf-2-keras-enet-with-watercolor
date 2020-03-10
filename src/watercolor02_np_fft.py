@@ -158,6 +158,11 @@ def my_img_show(img,title):
 
 def to_water_collor(img):
     im_pad = 3 
+    pyramid_lvls = 4
+    alpha = 0.6
+    beta = 0.3
+    h = 1.099
+    
     i_shape = np.array(img).shape
     im_w = i_shape[0]
     im_h = i_shape[1]
@@ -171,7 +176,7 @@ def to_water_collor(img):
     resized_image[im_pad:-im_pad,im_pad:-im_pad,:] = img
     
     my_img_opnt = to_opponent_np(resized_image)
-    my_img_show(my_img_opnt,"oponent input")
+    #my_img_show(my_img_opnt,"oponent input")
 
     im_dx = gabor_odd_filter(my_img_opnt)
 
@@ -179,10 +184,8 @@ def to_water_collor(img):
     im_dy = gabor_odd_filter(im_dy)
     im_dy = np.transpose(im_dy,[1,0,2])
 
-    im_waits = get_img_weight(img=my_img_opnt,levels=8)
+    im_waits = get_img_weight(img=my_img_opnt,levels=pyramid_lvls)
     
-    alpha = 0.7
-    beta = 0.4
     # element wise
     im_dx_w = np.multiply(im_dx,im_waits[0])
     im_dy_w = np.multiply(im_dy,im_waits[1])
@@ -196,11 +199,11 @@ def to_water_collor(img):
     div_trig = trig_xx + trig_yy
     
     img = div_trig
-    h = 1
+
     res = np.zeros(img.shape)
     for c in range (img.shape[2]):
         res[:,:,c] = fps.fft_poisson(img[:,:,c], h)
-    my_img_show(res,"oponent result")
+    #my_img_show(res,"oponent result")
     #res = norm_0_1_rgb(res)
     rgb_res = reverse_opponent_np(res)
     rgb_res = rgb_res[im_pad:-im_pad,im_pad:-im_pad,:]
