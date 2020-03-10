@@ -12,7 +12,7 @@ from scipy import signal
 #from scipy import ndimage
 from PIL import Image, ImageOps, ImageEnhance
 import cv2
-import fft_poisson_solver as fps
+import src.fft_poisson_solver as fps
 
 
 def get_oponent_filter() :

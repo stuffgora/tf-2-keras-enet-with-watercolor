@@ -118,7 +118,7 @@ def initial_block(inp, nb_filter=13, nb_row=3, nb_col=3, conv_stride=(2, 2), wc=
 def bottleneck(inp, output, internal_scale=4, use_relu=True, asymmetric=0, dilated=0, downsample=False, dropout_rate=0.1):
     # main branch
     internal = int(output / internal_scale)
-    encoder src/enet_wc_keras_model.py= inp
+    encoder = inp
 
     ## 1x1
     input_stride = 2 if downsample else 1  # the first 1x1 projection is replaced with a 2x2 convolution when downsampling

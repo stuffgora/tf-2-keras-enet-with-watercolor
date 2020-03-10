@@ -11,8 +11,8 @@ from watercolor02_np_fft import to_water_collor, my_img_show
 from PIL import Image
 
 def rand_img(m,n):
-    img = '../stars_clean.png'    
-    x = np.array(Image.open(img).convert("RGB"))/256.0 
+#    img = '../stars_clean.png'    
+#    x = np.array(Image.open(img).convert("RGB"))/256.0 
     
     x = np.random.rand(m,n,3)
     y = to_water_collor(x)
