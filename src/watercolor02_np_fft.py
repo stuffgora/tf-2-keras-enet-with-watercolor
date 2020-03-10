@@ -8,8 +8,8 @@ import math as math
 import scipy as sci
 import numpy as np
 from scipy import signal
-from scipy import misc
-from scipy import ndimage
+#from scipy import misc
+#from scipy import ndimage
 from PIL import Image, ImageOps, ImageEnhance
 import cv2
 import fft_poisson_solver as fps
@@ -219,7 +219,7 @@ if __name__ == '__main__':
     
     #img = Image.open('gray_square.png')
     #img = Image.open('stars.png')
-    img = Image.open('stars_clean.png')
+    img = Image.open('../stars_clean.png')
     #img = Image.open('wc_ddrm.png')
     #img = Image.open('wc_blue_black.png')
     title = 'orginal image'
