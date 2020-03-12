@@ -347,7 +347,8 @@ def visualize_prediction(pred,lbl,img):
 from src.utils import calculate_fid
 def predict():
     model = get_model()
-    model, _ = model_preload(model)  
+    model, _ = model_preload(model)
+    model.save(f'{cfg.model_name}')
     #test_ds = create_coco_test_set(im_w=cfg.image_width, im_h=cfg.image_height)
     #val_ds = create_coco_dataset(dataType='val2017', im_w=cfg.image_width, im_h=cfg.image_height) 
     #_, val_ds = get_train_val_data()

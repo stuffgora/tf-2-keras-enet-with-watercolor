@@ -6,13 +6,16 @@ Created on Tue Mar 10 02:45:27 2020
 """
 
 import numpy as np
+import sys
+sys.path.append('../')
+
 from watercolor02_np_fft import to_water_collor, my_img_show
 
 from PIL import Image
 
 def rand_img(m,n):
-#    img = '../stars_clean.png'    
-#    x = np.array(Image.open(img).convert("RGB"))/256.0 
+    #img = '../stars_clean.png'    
+    #x = np.array(Image.open(img).convert("RGB"))/256.0 
     
     x = np.random.rand(m,n,3)
     y = to_water_collor(x)
@@ -20,9 +23,18 @@ def rand_img(m,n):
 
 if __name__ == '__main__': 
     size = 256
-    for i in range(1):
+    for i in range(1000):
         for im in rand_img(size,size):
-            my_img_show(im[0], "src")
-            my_img_show(im[1], "res")
+#            my_img_show(im[1][:,:,0], "res0")
+#            my_img_show(im[1][:,:,1], "res1")
+#            my_img_show(im[1][:,:,2], "res2")
+#            my_img_show(im[0], "src")
+#            my_img_show(im[1], "res")
+            
+            dir = '../dataset/rand_wc'
+            x = Image.fromarray((im[0]*256.0).astype('uint8')).convert("RGB")
+            x.save(f"{dir}/{i}.png")
+            y = Image.fromarray((im[1]*256.0).astype('uint8')).convert("RGB")
+            y.save(f"{dir}annot/{i}.png")
         
     

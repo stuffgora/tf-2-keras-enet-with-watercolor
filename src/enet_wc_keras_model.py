@@ -182,6 +182,32 @@ def build_encoder(inp, dropout_rate=0.01, wc=None):
         enet = bottleneck(enet, 128, dilated=16)  # bottleneck 2.8
     return enet
 
+
+def build_poison_estim(inp, dropout_rate=0.01):
+    enet = Convolution2D(128, [1, 1], padding='same')(inp)
+    #enet = bottleneck(enet, 64,  dropout_rate=dropout_rate)
+    #enet = bottleneck(enet, 128,  dropout_rate=dropout_rate)
+
+    for i in range(2):
+        enet = bottleneck(enet, 128,  dropout_rate=dropout_rate)  # bottleneck 2.1
+        enet = bottleneck(enet, 128, dilated=2,  dropout_rate=dropout_rate)  # bottleneck 2.2
+        enet = bottleneck(enet, 128, asymmetric=5,  dropout_rate=dropout_rate)  # bottleneck 2.3
+        enet = bottleneck(enet, 128, dilated=4,  dropout_rate=dropout_rate)  # bottleneck 2.4
+        enet = bottleneck(enet, 128,  dropout_rate=dropout_rate)  # bottleneck 2.5
+        enet = bottleneck(enet, 128, dilated=8,  dropout_rate=dropout_rate)  # bottleneck 2.6
+        enet = bottleneck(enet, 128, asymmetric=5,  dropout_rate=dropout_rate)  # bottleneck 2.7
+        enet = bottleneck(enet, 128, dilated=16,  dropout_rate=dropout_rate)  # bottleneck 2.8
+    
+    enet = Convolution2D(64, [1, 1], padding='same')(inp)   
+    enet = Convolution2D(16, [1, 1], padding='same')(inp)
+    enet = Convolution2D(3, [1, 1], padding='same')(inp)
+#    enet = bottleneck(enet, 64,  dropout_rate=dropout_rate)
+#    enet = bottleneck(enet, 16,  dropout_rate=dropout_rate)
+#    enet = bottleneck(enet, 8,  dropout_rate=dropout_rate)
+#    enet = bottleneck(enet, 3,  dropout_rate=dropout_rate)
+    return enet
+
+
 def bottleneck_decoder(inp, output, upsample=False, reverse_module=False):
     internal = int(output / 4)
     input_stride = 2 if upsample else 1
@@ -288,6 +314,17 @@ def autoencoder_wc(nc, input_shape,
 
     return model, name
 
+def enet_poisson(nc, input_shape,
+                loss='mean_squared_error',
+                optimizer='adadelta',
+                metrics=['accuracy', 'mean_squared_error'],
+                ):
+    inp =  Input(shape=(input_shape[0], input_shape[1], 3))
+    enet = build_poison_estim(inp)
+    model = tf.keras.Model(inputs=inp, outputs=enet)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+    name = 'enet_poisson'
+    return model, name
 
 if __name__ == '__main__':
     with tf.device('/CPU:0'):

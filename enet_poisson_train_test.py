@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 import tensorflow as tf
 
-from src.enet_wc_keras_model import autoencoder_wc
+from src.enet_wc_keras_model import autoencoder_wc, enet_poisson
 from src.enetcfg import EnetCfg
 
 from PIL import Image
@@ -59,15 +59,17 @@ def get_rand_data(m,n):
 
 
 def get_optimizer():
-    initial_learning_rate = 5e-4 #0.1
+    initial_learning_rate = 5e-3 #0.1
     #decay_steps = int(num_epochs_before_decay * num_steps_per_epoch) ~100*100
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate,
-        decay_steps=500, #10*2*(50*10),#    (steps_in_s*batch)
-        decay_rate=1e-1, #0.96,
+        decay_steps=400, # 100 #500, #10*2*(50*10),#    (steps_in_s*batch)
+        decay_rate=0.96, #1e-1, #0.96,
         staircase=True)
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-8)
+    #optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-8)
     #optimizer = tf.optimizers.Adadelta(learning_rate=5e-5, rho=1e-1, epsilon=1e-08)
+    optimizer = tf.keras.optimizers.RMSprop(learning_rate=lr_schedule)
+
     #optimizer='adadelta'
     return optimizer
    
@@ -75,15 +77,19 @@ def get_model(cfg=cfg):
     dw = cfg.image_width
     dh = cfg.image_height
     
-    optimizer = get_optimizer() #'SGD' # 'adam' #
-    loss = 'mean_squared_error' #get_loss()
+    #optimizer = 'adam' #'Adagrad' #'SGD' # get_optimizer() #'SGD' # 'adam' #
+    #optimizer = tf.keras.optimizers.Adam(learning_rate=0.1, epsilon=1e-8)
+    optimizer = get_optimizer()
+    loss = 'mean_squared_error' #'logcosh' #'mean_absolute_error' #'mean_squared_error' #get_loss()
     metrics=['accuracy', 'mean_squared_error'] #get_metrics()
     
-    model, model_name = autoencoder_wc(nc=3, 
-                                       input_shape=(dw, dh),
-                                       loss=loss,
-                                       optimizer=optimizer, 
-                                       metrics=metrics )                                      
+    #model, model_name = autoencoder_wc(
+    model, model_name = enet_poisson(
+            nc=3, 
+            input_shape=(dw, dh),
+            loss=loss,
+            optimizer=optimizer, 
+            metrics=metrics )                                      
     return model
 
 
@@ -91,9 +97,10 @@ def train( ):
     print(f'Preparing to train on {cfg.dataset_name} data...')
     
     autoenc = get_model()
-    #model.save('saved_model/poisson_model')
-    pre_trained_model = tf.keras.models.load_model('saved_model/poisson_model')
     
+    #model.save('saved_model/poisson_model')
+    
+    pre_trained_model = tf.keras.models.load_model('saved_model/poisson_model')
     autoenc.set_weights(pre_trained_model.get_weights())
  
     m = cfg.image_width
@@ -105,17 +112,17 @@ def train( ):
     # ---------- Fit Model - Training-----------------
     history = autoenc.fit(
         x=train_ds.batch(5),
-        epochs=100, #200, #cfg.epochs,
-        steps_per_epoch=10, #cfg.steps,
+        epochs=3, # 10, #200, #cfg.epochs,
+        steps_per_epoch=50, #cfg.steps,
         #class_weight=cw_d,
         verbose=1,
         #callbacks=callbacks(log_dir, checkpoint_dir, cfg.model_name ),        
         validation_data=val_ds.batch(2),
-        validation_steps=4 #cfg.val_steps,
+        validation_steps=1 #cfg.val_steps,
         #initial_epoch=completed_epochs
     )  
     print('\nhistory dict:', history.history)
-    return autoenc
+    return autoenc, history
 
 
 if __name__ == '__main__':
@@ -130,16 +137,20 @@ if __name__ == '__main__':
     #model = get_model()
     #model.save('saved_model/poisson_model')
     
-    model = train( )
+    model, history = train( )
     model.save('saved_model/poisson_model')
     #new_model = tf.keras.models.load_model('saved_model/my_model') 
        
     x = np.expand_dims(x, axis=0)
     y = model.predict(x)
     y = np.squeeze(y, axis=0)
+    my_img_show(y[:,:,0], "res0")
+    my_img_show(y[:,:,1], "res1")
+    my_img_show(y[:,:,2], "res2")
     my_img_show(y, "res")
+    print('\nhistory dict:', history.history['val_accuracy'])
  
-    
+    # 0.529
     
     
     
