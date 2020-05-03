@@ -156,12 +156,12 @@ def my_img_show(img,title):
     plt.show()
     
 
-def to_water_collor(img):
+def to_water_collor(img,alpha = 0.9, beta = 0.6, h = 1.0):
     im_pad = 3 
     pyramid_lvls = 4
-    alpha = 0.9 #0.6
-    beta = 0.6 # 0.3
-    h = 1.0 #1.099
+#    alpha = 0.9 #0.6
+#    beta = 0.6 # 0.3
+#    h = 1.0 #1.099
     
     i_shape = np.array(img).shape
     im_w = i_shape[0]

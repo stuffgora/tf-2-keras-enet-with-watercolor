@@ -373,6 +373,30 @@ def create_dataset(data_dir,im_w=None,im_h=None, num_classes=12,  reshape=1, cla
   # Set `num_parallel_calls` so multiple images are loaded/processed in parallel.
   return labeled_ds
 
+
+def create_poisson_rand_dataset(data_dir,im_w=None,im_h=None, num_classes=12,  reshape=1, class_w=None, data_transform=1):
+  lbl_data_dir = data_dir+"annot"
+  data_dir = pathlib.Path(data_dir) 
+  lbl_data_dir = pathlib.Path(lbl_data_dir)
+  lbl_file_names = [f.name for f in pathlib.Path(lbl_data_dir).glob("*.png")]
+
+  x_ds = [ str(data_dir/fname) for  fname in lbl_file_names]
+  y_ds = [ str(lbl_data_dir/fname)  for  fname in lbl_file_names]
+  
+  x_ds = tf.data.Dataset.list_files(x_ds,seed=0)
+  y_ds = tf.data.Dataset.list_files(y_ds,seed=0)
+  
+  process_ds_path     = lambda x : process_img_from_path(x, im_w=im_w,im_h=im_h,chn=3,dtype=tf.float32)
+  x_ds = x_ds.map(process_ds_path)#, num_parallel_calls=AUTOTUNE)
+  
+  process_ann_ds_path = lambda x : process_img_from_path(x, im_w=im_w,im_h=im_h,chn=3,dtype=tf.float32)
+  y_ds = y_ds.map(process_ann_ds_path) #, num_parallel_calls=AUTOTUNE)
+
+  labeled_ds = tf.data.Dataset.zip((x_ds , y_ds))
+  
+  return labeled_ds
+
+
 if __name__ == '__main__':
   
   
@@ -391,7 +415,7 @@ if __name__ == '__main__':
 #    print("-------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1")
 #    #train_ds.concatenate(val_ds)
 #    #train_ds = prepare_for_training(train_ds, batch_size=1, cache=None, shuffle_buffer_size=1000)
-    train_ds = prepare_for_training(train_ds,batch_size=12,cache=None,shuffle_buffer_size=1000) 
+    train_ds = pautoencmodelrepare_for_training(train_ds,batch_size=12,cache=None,shuffle_buffer_size=1000) 
     for im ,lbl in train_ds.take(1):
       print("Image shape: ", im.numpy().shape)
       print("Label shape: ", lbl.numpy().shape)

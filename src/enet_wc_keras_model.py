@@ -6,7 +6,7 @@ Created on Thu Oct 10 20:56:35 2019
 """
 import tensorflow as tf
 
-from tensorflow.keras.layers import Concatenate,Add
+from tensorflow.keras.layers import Concatenate,Add, Dense 
 from tensorflow.keras.layers import PReLU, ReLU
 from tensorflow.keras.layers import ZeroPadding2D, Conv2DTranspose # Convolution2D, 
 from tensorflow.keras.layers import Permute, SpatialDropout2D
@@ -162,6 +162,77 @@ def bottleneck(inp, output, internal_scale=4, use_relu=True, asymmetric=0, dilat
     encoder = PReLU(shared_axes=[1, 2])(encoder)
     return encoder
 
+def wc_bottleneck(inp ):
+    activation ='relu'
+    dropout_rate = 0.1
+    
+    in_shape = inp.shape
+    
+    enet = Convolution2D(3, [3, 3], padding='same', activation=activation )(inp)
+    enet = Convolution2D(3, [3, 3], dilation_rate=4, padding='same', activation=activation)(enet)
+    enet = Convolution2D(3, [3, 3], dilation_rate=8, padding='same', activation=activation)(enet)
+    enet = Dense(3,  use_bias=True, activation=activation, dtype='float32') (enet)
+    enet = ReLU()(enet)
+    enet = BatchNormalization(momentum=0.1)(enet) # enet uses momentum of 0.1, keras default is 0.99
+    enet = SpatialDropout2D(dropout_rate)(enet)
+    
+    for out in  [8,16,32,64]: 
+        enet = Convolution2D(out, [1, 1], padding='same', activation=activation )(enet)
+        enet = Convolution2D(out, [3, 3], dilation_rate=4, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [3, 3], dilation_rate=8, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out*2, [2, 2], padding='same', strides=2, use_bias=False, activation=activation)(enet)
+        enet = BatchNormalization(momentum=0.1)(enet) # enet uses momentum of 0.1, keras default is 0.99
+        enet = SpatialDropout2D(dropout_rate)(enet)
+        
+     
+    out = 128
+    for i in range(16):
+        enet = Convolution2D(out, [3, 3], padding='same', activation=activation )(enet)
+        enet = Convolution2D(out, [1, 5], dilation_rate=2, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [5, 1], dilation_rate=2, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [1, 5], dilation_rate=4, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [5, 1], dilation_rate=4, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [1, 5], dilation_rate=8, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [5, 1], dilation_rate=8, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [3, 3], padding='same', activation=activation)(enet)
+        enet = BatchNormalization(momentum=0.1)(enet) # enet uses momentum of 0.1, keras default is 0.99
+        enet = SpatialDropout2D(dropout_rate)(enet)
+    
+    
+    for out in  [64,32,16,8]: 
+        enet = Conv2DTranspose(out*2, (3, 3),  padding='same', strides=(2, 2) )(enet)
+        enet = Convolution2D(out*2, [3, 3], dilation_rate=4, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [1, 1], padding='same', activation=activation )(enet)
+        enet = Convolution2D(out, [3, 3], dilation_rate=4, padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [3, 3], dilation_rate=8, padding='same', activation=activation)(enet)
+        enet = BatchNormalization(momentum=0.1)(enet) # enet uses momentum of 0.1, keras default is 0.99
+        enet = SpatialDropout2D(dropout_rate)(enet)
+
+
+    m_dif = in_shape[1]-enet.shape[1]
+    n_dif = in_shape[2]-enet.shape[2]
+    top_pad = int(m_dif/2)
+    bottom_pad = m_dif - top_pad
+    left_pad = int(n_dif/2)
+    right_pad = n_dif - left_pad
+    enet = ZeroPadding2D( padding=((top_pad, bottom_pad), (left_pad, right_pad)))(enet)
+    
+    out = 3
+    for i in range(4):
+        enet = Convolution2D(out, [1, 8], padding='same', activation=activation )(enet)
+        enet = Convolution2D(out, [8, 1], padding='same', activation=activation )(enet)
+    
+    enet = BatchNormalization(momentum=0.1)(enet) # enet uses momentum of 0.1, keras default is 0.99
+    enet = SpatialDropout2D(dropout_rate)(enet)
+    
+    enet = Convolution2D(out, [3, 3], padding='same', activation=activation )(enet)
+    enet = Convolution2D(out, [3, 3], dilation_rate=2, padding='same', activation=activation )(enet)
+    enet = Convolution2D(out, [1, 5], dilation_rate=4, padding='same', activation=activation)(enet)
+    enet = Convolution2D(out, [5, 1], dilation_rate=4, padding='same', activation=activation)(enet)
+    enet = Convolution2D(out, [1, 5], dilation_rate=6, padding='same', activation=activation)(enet)
+    enet = Convolution2D(out, [5, 1], dilation_rate=6, padding='same', activation=activation)(enet)
+    enet = Convolution2D(out, [3, 3], padding='same', activation=activation )(enet)
+    return enet
 
 def build_encoder(inp, dropout_rate=0.01, wc=None):
     enet = initial_block(inp,wc=wc)
@@ -183,28 +254,34 @@ def build_encoder(inp, dropout_rate=0.01, wc=None):
     return enet
 
 
-def build_poison_estim(inp, dropout_rate=0.01):
-    enet = Convolution2D(128, [1, 1], padding='same')(inp)
-    #enet = bottleneck(enet, 64,  dropout_rate=dropout_rate)
-    #enet = bottleneck(enet, 128,  dropout_rate=dropout_rate)
-
+def bottleneck_chain(inp, out=16, repeat=2, dropout_rate=0.01 ):
     for i in range(2):
-        enet = bottleneck(enet, 128,  dropout_rate=dropout_rate)  # bottleneck 2.1
-        enet = bottleneck(enet, 128, dilated=2,  dropout_rate=dropout_rate)  # bottleneck 2.2
-        enet = bottleneck(enet, 128, asymmetric=5,  dropout_rate=dropout_rate)  # bottleneck 2.3
-        enet = bottleneck(enet, 128, dilated=4,  dropout_rate=dropout_rate)  # bottleneck 2.4
-        enet = bottleneck(enet, 128,  dropout_rate=dropout_rate)  # bottleneck 2.5
-        enet = bottleneck(enet, 128, dilated=8,  dropout_rate=dropout_rate)  # bottleneck 2.6
-        enet = bottleneck(enet, 128, asymmetric=5,  dropout_rate=dropout_rate)  # bottleneck 2.7
-        enet = bottleneck(enet, 128, dilated=16,  dropout_rate=dropout_rate)  # bottleneck 2.8
+        enet = bottleneck(inp, out,  dropout_rate=dropout_rate)  # bottleneck 2.1
+        enet = bottleneck(enet, out, dilated=2,  dropout_rate=dropout_rate)  # bottleneck 2.2
+        enet = bottleneck(enet, out, asymmetric=5,  dropout_rate=dropout_rate)  # bottleneck 2.3
+        enet = bottleneck(enet, out, dilated=4,  dropout_rate=dropout_rate)  # bottleneck 2.4
+        enet = bottleneck(enet, out,  dropout_rate=dropout_rate)  # bottleneck 2.5
+        enet = bottleneck(enet, out, dilated=8,  dropout_rate=dropout_rate)  # bottleneck 2.6
+        enet = bottleneck(enet, out, asymmetric=5,  dropout_rate=dropout_rate)  # bottleneck 2.7
+        enet = bottleneck(enet, out, dilated=16,  dropout_rate=dropout_rate)  # bottleneck 2.8
+    return enet
+
+def build_poison_estim(inp, dropout_rate=0.01):
+    enet = Convolution2D(16, [1, 1], padding='same', activation='tanh' )(inp)
+    enet = bottleneck_chain(enet,16)
     
-    enet = Convolution2D(64, [1, 1], padding='same')(inp)   
-    enet = Convolution2D(16, [1, 1], padding='same')(inp)
-    enet = Convolution2D(3, [1, 1], padding='same')(inp)
-#    enet = bottleneck(enet, 64,  dropout_rate=dropout_rate)
-#    enet = bottleneck(enet, 16,  dropout_rate=dropout_rate)
-#    enet = bottleneck(enet, 8,  dropout_rate=dropout_rate)
-#    enet = bottleneck(enet, 3,  dropout_rate=dropout_rate)
+    enet = Convolution2D(64, [1, 1], padding='same', activation='tanh' )(enet)
+    enet = bottleneck_chain(enet,64)
+    
+    enet = Convolution2D(128, [1, 1], padding='same', activation='tanh' )(enet)
+    enet = bottleneck_chain(enet,128)
+    
+    enet = Convolution2D(64, [1, 1], padding='same', activation='tanh' )(inp)
+    enet = bottleneck_chain(enet,64)
+    enet = Convolution2D(16, [1, 1], padding='same', activation='tanh' )(inp)
+    enet = bottleneck_chain(enet,16)
+    enet = Convolution2D(3, [1, 1], padding='same', activation='tanh' )(inp)
+    enet = ReLU()(enet)
     return enet
 
 
@@ -314,7 +391,7 @@ def autoencoder_wc(nc, input_shape,
 
     return model, name
 
-def enet_poisson(nc, input_shape,
+def enet_poisson_old(nc, input_shape,
                 loss='mean_squared_error',
                 optimizer='adadelta',
                 metrics=['accuracy', 'mean_squared_error'],
@@ -323,6 +400,90 @@ def enet_poisson(nc, input_shape,
     enet = build_poison_estim(inp)
     model = tf.keras.Model(inputs=inp, outputs=enet)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+    name = 'enet_poisson'
+    return model, name
+
+def wc_poisson(nc, input_shape,
+                loss='mean_squared_error',
+                optimizer='adadelta',
+                metrics=['accuracy', 'mean_squared_error'],
+                ):
+    inp =  Input(shape=(input_shape[0], input_shape[1], 3))
+    enet = wc_bottleneck(inp )
+    
+    model = tf.keras.Model(inputs=inp, outputs=enet)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+    name = 'enet_poisson'
+    return model, name
+
+
+def wc_poisson_small(nc, input_shape,
+                loss='mean_squared_error',
+                optimizer='adadelta',
+                metrics=['accuracy', 'mean_squared_error'],
+                ):
+    
+    activation = 'relu'
+    dropout_rate =  0.1
+    inp =  Input(shape=(input_shape[0], input_shape[1], 3))
+    enet = Dense(3,  use_bias=True, activation=activation, dtype='float32') (inp)
+    
+    merged = [inp, enet ]
+    enet = Concatenate(axis=3)(merged)
+    enet = Convolution2D(6, [3, 3], padding='same', activation=activation )(enet)
+    enet = BatchNormalization(momentum=0.99)(enet)
+    enet = SpatialDropout2D(dropout_rate)(enet)
+    
+    enet = Convolution2D(16, [1, 1], padding='same', activation=activation)(enet)    
+    enet = Convolution2D(16, [3, 3], padding='same', activation=activation )(enet)
+    
+    merged = [inp, enet ]
+    enet = Concatenate(axis=3)(merged)
+    enet = Convolution2D(19, [3, 3], padding='same', activation=activation )(enet)
+    #enet = BatchNormalization(momentum=0.99)(enet)
+    
+    enet = Convolution2D(32, [1, 1], padding='same', activation=activation)(enet)
+    enet = Convolution2D(32, [3, 3], dilation_rate=4, padding='same', activation=activation)(enet)
+    enet = Convolution2D(32, [3, 3], dilation_rate=8, padding='same', activation=activation)(enet)
+    enet = Convolution2D(32, [5, 5], padding='same', activation=activation)(enet)
+    enet = Convolution2D(32, [3, 3], padding='same', activation=activation)(enet)
+    
+    merged = [inp, enet ]
+    enet = Concatenate(axis=3)(merged)
+    enet = Convolution2D(35, [3, 3], padding='same', activation=activation )(enet)
+    enet = BatchNormalization(momentum=0.99)(enet)
+    
+    for out in [64, 32, 16, 8]:
+        enet = Convolution2D(out, [1, 1],  padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [5, 5],  padding='same', activation=activation)(enet)
+        enet = Convolution2D(out, [3, 3],  padding='same', activation=activation)(enet)
+        enet = BatchNormalization(momentum=0.99)(enet)
+    
+    enet = Convolution2D(3, [1, 1],  padding='same', activation=activation)(enet)
+    enet = Convolution2D(out, [3, 3],  padding='same', activation=activation)(enet)
+    enet = BatchNormalization(momentum=0.99)(enet) # enet uses momentum of 0.1, keras default is 0.99
+    #enet = SpatialDropout2D(dropout_rate)(enet)
+    enet = Dense(3,  use_bias=True, activation=activation, dtype='float32') (enet)
+
+    model = tf.keras.Model(inputs=inp, outputs=enet)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+    name = 'wc_poisson_small'
+    return model, name
+
+def enet_poisson(nc, input_shape,
+                loss='mean_squared_error',
+                optimizer='adadelta',
+                metrics=['accuracy', 'mean_squared_error'],
+                ):
+    inp =  Input(shape=(input_shape[0], input_shape[1], 3))
+    enet = inp
+    enet = build_encoder(enet, wc=None)
+    enet = build_decoder(enet, nc=3, in_shape=input_shape,wc=None)
+    enet = ReLU()(enet)
+    
+    model = tf.keras.Model(inputs=inp, outputs=enet)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+
     name = 'enet_poisson'
     return model, name
 
